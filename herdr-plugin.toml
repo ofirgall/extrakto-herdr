@@ -3,12 +3,12 @@ name = "Extrakto"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
 description = "Extract text tokens (paths, URLs, words, lines) from the pane and fuzzy-pick with fzf. Inspired by extrakto for tmux."
-platforms = ["linux", "macos"]
+platforms = ["linux", "macos", "windows"]
 
 [[actions]]
 id = "open"
 title = "Extrakto"
-command = ["./bin/extrakto-herdr"]
+command = ["python3", "./bin/extrakto-herdr.py"]
 
 [[panes]]
 id = "picker"
@@ -16,4 +16,4 @@ title = "Extrakto"
 placement = "popup"
 width = "50%"
 height = "50%"
-command = ["/usr/bin/env", "python3", "./extrakto_herdr.py"]
+command = ["python3", "./extrakto_herdr.py"]

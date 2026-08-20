@@ -59,8 +59,10 @@ def get_pane_content(pane_id):
             ["herdr", "pane", "read", pane_id, "--source", "visible"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
-        if result.returncode == 0 and result.stdout.strip():
+        if result.returncode == 0 and result.stdout and result.stdout.strip():
             return result.stdout
     except FileNotFoundError:
         pass
@@ -76,6 +78,8 @@ def get_all_visible_panes_content(trigger_pane_id):
             ["herdr", "pane", "get", trigger_pane_id],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             return get_pane_content(trigger_pane_id)
@@ -89,6 +93,8 @@ def get_all_visible_panes_content(trigger_pane_id):
             ["herdr", "pane", "list"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             return get_pane_content(trigger_pane_id)
@@ -115,6 +121,8 @@ def copy_to_clipboard(text):
     system = platform.system()
     if system == "Darwin":
         subprocess.run(["pbcopy"], input=text.encode(), check=True)
+    elif system == "Windows":
+        subprocess.run(["clip.exe"], input=text.encode(), check=True)
     elif system == "Linux":
         session_type = os.environ.get("XDG_SESSION_TYPE", "")
         if session_type == "wayland":
@@ -134,8 +142,13 @@ def insert_to_pane(text, pane_id):
 
         sock_path = os.environ.get("HERDR_SOCKET_PATH", "")
         if not sock_path:
-            home = os.environ.get("HOME", "")
-            sock_path = f"{home}/.config/herdr/herdr.sock"
+            import platform
+            if platform.system() == "Windows":
+                appdata = os.environ.get("APPDATA", "")
+                sock_path = os.path.join(appdata, "herdr", "herdr.sock")
+            else:
+                home = os.environ.get("HOME", "")
+                sock_path = f"{home}/.config/herdr/herdr.sock"
 
         req = json.dumps({
             "id": "extrakto-insert",
