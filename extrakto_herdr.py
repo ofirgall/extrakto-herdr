@@ -149,23 +149,23 @@ def get_pane_content(pane_id):
     """Read pane content via herdr CLI."""
     try:
         result = subprocess.run(
-            ["herdr", "pane", "read", "--pane", pane_id, "--source", "visible"],
+            ["herdr", "pane", "read", pane_id, "--source", "visible"],
             capture_output=True,
             text=True,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and result.stdout.strip():
             return result.stdout
     except FileNotFoundError:
         pass
 
-    # Fallback: try full scrollback
+    # Fallback: try recent (default)
     try:
         result = subprocess.run(
-            ["herdr", "pane", "read", "--pane", pane_id],
+            ["herdr", "pane", "read", pane_id],
             capture_output=True,
             text=True,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and result.stdout.strip():
             return result.stdout
     except FileNotFoundError:
         pass
