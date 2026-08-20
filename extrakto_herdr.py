@@ -172,7 +172,7 @@ def main():
         print("No pane content found", file=sys.stderr)
         sys.exit(1)
 
-    current_filter = "all"
+    current_filter = "word"
 
     while True:
         items = extract_all(text, current_filter)
