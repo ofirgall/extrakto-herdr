@@ -3,10 +3,12 @@
 extrakto-herdr — extract tokens from herdr pane content and fuzzy-pick them.
 
 Inspired by extrakto for tmux (https://github.com/laktak/extrakto).
+Uses extrakto's own extraction library if available, otherwise falls back
+to bundled filters.
 
 Flow:
   1. Read pane content via `herdr pane read`.
-  2. Extract tokens (words, paths, URLs, lines, quotes).
+  2. Extract tokens using extrakto.
   3. Pipe through fzf for fuzzy selection.
   4. Copy to clipboard or insert into the pane.
 """
@@ -16,15 +18,47 @@ import re
 import subprocess
 import sys
 from collections import OrderedDict
-from configparser import ConfigParser
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PANE_ID = os.environ.get("HERDR_PANE_ID", "")
 TRIGGER_PANE = os.environ.get("EXTRAKTO_TRIGGER_PANE", PANE_ID)
 
-MIN_LENGTH_DEFAULT = 5
+# Try to import extrakto from the tmux plugin (reuse its filters/config)
+EXTRAKTO_PATH = os.path.expanduser("~/.tmux/plugins/extrakto")
+if os.path.isdir(EXTRAKTO_PATH):
+    sys.path.insert(0, EXTRAKTO_PATH)
 
-# --- Filter definitions (from extrakto.conf) ---
+try:
+    from extrakto import Extrakto, get_lines
+    HAS_EXTRAKTO = True
+except ImportError:
+    HAS_EXTRAKTO = False
+
+
+def extract_with_extrakto(text, filter_name="all"):
+    """Use the real extrakto library."""
+    extrakto = Extrakto(alt=True)
+    results = []
+
+    if filter_name == "all":
+        for name in extrakto.all():
+            results += extrakto[name].filter(text)
+        results += get_lines(text)
+    elif filter_name == "line":
+        results = get_lines(text)
+    elif filter_name == "word":
+        results = extrakto["word"].filter(text)
+    else:
+        try:
+            results = extrakto[filter_name].filter(text)
+        except Exception:
+            results = get_lines(text)
+
+    results.reverse()
+    return list(OrderedDict.fromkeys(results))
+
+
+# --- Fallback extraction (if extrakto not installed) ---
 
 BUILTIN_FILTERS = {
     "word": {
@@ -35,7 +69,7 @@ BUILTIN_FILTERS = {
         "min_length": 5,
     },
     "path": {
-        "regex": r"(?:[ \t\n\"([<':]|^)(~|/)?([-~a-zA-Z0-9_+-,.]+/[^ \t\n\r|:\"'$%&)>\]]*)",
+        "regex": r'(?:[ \t\n"([<\':]|^)(~|/)?([-~a-zA-Z0-9_+-,.]+/[^ \t\n\r|:"\'$%&)>\]]*)',
         "exclude": r"[kmgKMG]/s$|^\d+/\d+$",
         "rstrip": '",):"',
         "in_all": True,
@@ -60,51 +94,15 @@ BUILTIN_FILTERS = {
 }
 
 
-def load_filters():
-    """Load builtin + user filters from ~/.config/extrakto/extrakto.conf."""
-    filters = dict(BUILTIN_FILTERS)
-
-    user_conf_path = os.path.expanduser("~/.config/extrakto/extrakto.conf")
-    if os.path.exists(user_conf_path):
-        conf = ConfigParser(interpolation=None)
-        conf.read(user_conf_path, encoding="utf-8")
-        for name in conf.sections():
-            sect = conf[name]
-            if name in filters:
-                if sect.get("regex"):
-                    filters[name]["regex"] = sect["regex"]
-                if sect.get("exclude"):
-                    filters[name]["exclude"] = sect["exclude"]
-                if sect.get("lstrip"):
-                    filters[name]["lstrip"] = sect["lstrip"]
-                if sect.get("rstrip"):
-                    filters[name]["rstrip"] = sect["rstrip"]
-                if sect.get("min_length"):
-                    filters[name]["min_length"] = int(sect["min_length"])
-            else:
-                filters[name] = {
-                    "regex": sect.get("regex", ""),
-                    "exclude": sect.get("exclude", ""),
-                    "lstrip": sect.get("lstrip", ""),
-                    "rstrip": sect.get("rstrip", ""),
-                    "in_all": sect.getboolean("in_all", True),
-                    "min_length": int(sect.get("min_length", MIN_LENGTH_DEFAULT)),
-                }
-
-    return filters
-
-
 def extract_filter(text, filt):
-    """Apply a single filter and return matches."""
     regex = filt.get("regex")
     if not regex:
         return []
-
     results = []
     exclude = filt.get("exclude", "")
     lstrip = filt.get("lstrip", "")
     rstrip = filt.get("rstrip", "")
-    min_length = filt.get("min_length", MIN_LENGTH_DEFAULT)
+    min_length = filt.get("min_length", 5)
 
     for m in re.finditer(regex, "\n" + text, flags=re.I):
         item = "".join(filter(None, m.groups()))
@@ -115,35 +113,38 @@ def extract_filter(text, filt):
         if len(item) >= min_length:
             if not exclude or not re.search(exclude, item, re.I):
                 results.append(item)
-
     return results
 
 
-def extract_lines(text, min_length=MIN_LENGTH_DEFAULT):
-    """Extract full lines."""
+def extract_lines_fallback(text, min_length=5):
     return [line.strip() for line in text.splitlines() if len(line.strip()) >= min_length]
 
 
-def extract_all(text, filters, filter_name="all"):
-    """Extract using specified filter or all filters."""
+def extract_fallback(text, filter_name="all"):
     results = []
-
     if filter_name == "all":
-        for name, filt in filters.items():
+        for name, filt in BUILTIN_FILTERS.items():
             if filt.get("in_all", True):
                 results.extend(extract_filter(text, filt))
-        results.extend(extract_lines(text))
+        results.extend(extract_lines_fallback(text))
     elif filter_name == "line":
-        results = extract_lines(text)
-    elif filter_name == "word":
-        results = extract_filter(text, filters.get("word", BUILTIN_FILTERS["word"]))
-    elif filter_name in filters:
-        results = extract_filter(text, filters[filter_name])
+        results = extract_lines_fallback(text)
+    elif filter_name in BUILTIN_FILTERS:
+        results = extract_filter(text, BUILTIN_FILTERS[filter_name])
+    else:
+        results = extract_lines_fallback(text)
 
-    # deduplicate preserving order, most recent first
     results.reverse()
     return list(OrderedDict.fromkeys(results))
 
+
+def extract_all(text, filter_name="all"):
+    if HAS_EXTRAKTO:
+        return extract_with_extrakto(text, filter_name)
+    return extract_fallback(text, filter_name)
+
+
+# --- Herdr integration ---
 
 def get_pane_content(pane_id):
     """Read pane content via herdr CLI."""
@@ -158,7 +159,6 @@ def get_pane_content(pane_id):
     except FileNotFoundError:
         pass
 
-    # Fallback: try recent (default)
     try:
         result = subprocess.run(
             ["herdr", "pane", "read", pane_id],
@@ -174,9 +174,7 @@ def get_pane_content(pane_id):
 
 
 def copy_to_clipboard(text):
-    """Copy text to system clipboard."""
     import platform
-
     system = platform.system()
     if system == "Darwin":
         subprocess.run(["pbcopy"], input=text.encode(), check=True)
@@ -193,27 +191,22 @@ def copy_to_clipboard(text):
 
 
 def insert_to_pane(text, pane_id):
-    """Send text as keys to the pane."""
     try:
         import json
+        import socket
 
         sock_path = os.environ.get("HERDR_SOCKET_PATH", "")
         if not sock_path:
             home = os.environ.get("HOME", "")
             sock_path = f"{home}/.config/herdr/herdr.sock"
 
-        import socket
-
-        addr = sock_path
-        req = json.dumps(
-            {
-                "id": "extrakto-insert",
-                "method": "pane.send_keys",
-                "params": {"pane_id": pane_id, "keys": list(text)},
-            }
-        )
+        req = json.dumps({
+            "id": "extrakto-insert",
+            "method": "pane.send_keys",
+            "params": {"pane_id": pane_id, "keys": list(text)},
+        })
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(addr)
+        s.connect(sock_path)
         s.sendall((req + "\n").encode())
         s.recv(256)
         s.close()
@@ -222,7 +215,6 @@ def insert_to_pane(text, pane_id):
 
 
 def run_fzf(items, filter_name):
-    """Run fzf and return (action, selection)."""
     filter_order = ["all", "word", "path", "url", "line", "quote", "s-quote"]
     header = f"enter=copy, tab=insert, ctrl-f=filter [{filter_name}]"
 
@@ -275,11 +267,10 @@ def main():
         print("No pane content found", file=sys.stderr)
         sys.exit(1)
 
-    filters = load_filters()
     current_filter = "all"
 
     while True:
-        items = extract_all(text, filters, current_filter)
+        items = extract_all(text, current_filter)
         if not items:
             items = ["NO MATCH - try a different filter"]
 
