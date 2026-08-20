@@ -13,5 +13,7 @@ command = ["./bin/extrakto-herdr"]
 [[panes]]
 id = "picker"
 title = "Extrakto"
-placement = "overlay"
+placement = "popup"
+width = "90%"
+height = "90%"
 command = ["/usr/bin/env", "python3", "./extrakto_herdr.py"]
