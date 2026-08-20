@@ -131,7 +131,6 @@ def run_fzf(items, filter_name):
         f"--header={header}",
         "--expect=ctrl-c,esc,tab,ctrl-f",
         "--tiebreak=index",
-        "--layout=reverse",
         "--no-info",
     ]
 
