@@ -53,7 +53,7 @@ def extract_all(text, filter_name="all"):
 # --- Herdr integration ---
 
 def get_pane_content(pane_id):
-    """Read pane content via herdr CLI."""
+    """Read visible content from a single pane."""
     try:
         result = subprocess.run(
             ["herdr", "pane", "read", pane_id, "--source", "visible"],
@@ -64,19 +64,46 @@ def get_pane_content(pane_id):
             return result.stdout
     except FileNotFoundError:
         pass
+    return ""
+
+
+def get_all_visible_panes_content(trigger_pane_id):
+    """Read visible content from all panes in the same tab (like tmux 'window full')."""
+    import json as json_mod
 
     try:
         result = subprocess.run(
-            ["herdr", "pane", "read", pane_id],
+            ["herdr", "pane", "list"],
             capture_output=True,
             text=True,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout
-    except FileNotFoundError:
-        pass
+        if result.returncode != 0:
+            return get_pane_content(trigger_pane_id)
 
-    return ""
+        data = json_mod.loads(result.stdout)
+        panes = data.get("result", {}).get("panes", [])
+
+        trigger_tab = None
+        for p in panes:
+            if p["pane_id"] == trigger_pane_id:
+                trigger_tab = p.get("tab_id")
+                break
+
+        if not trigger_tab:
+            return get_pane_content(trigger_pane_id)
+
+        combined = ""
+        for p in panes:
+            if p.get("tab_id") == trigger_tab and p["pane_id"] != trigger_pane_id:
+                content = get_pane_content(p["pane_id"])
+                if content:
+                    combined += content + "\n"
+
+        combined += get_pane_content(trigger_pane_id)
+        return combined
+
+    except (FileNotFoundError, json_mod.JSONDecodeError, KeyError):
+        return get_pane_content(trigger_pane_id)
 
 
 def copy_to_clipboard(text):
@@ -167,7 +194,7 @@ def main():
         print("Error: EXTRAKTO_TRIGGER_PANE or HERDR_PANE_ID not set", file=sys.stderr)
         sys.exit(1)
 
-    text = get_pane_content(TRIGGER_PANE)
+    text = get_all_visible_panes_content(TRIGGER_PANE)
     if not text:
         print("No pane content found", file=sys.stderr)
         sys.exit(1)
