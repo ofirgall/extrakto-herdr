@@ -72,7 +72,6 @@ def get_all_visible_panes_content(trigger_pane_id):
     import json as json_mod
 
     try:
-        # Get the trigger pane's tab_id
         result = subprocess.run(
             ["herdr", "pane", "get", trigger_pane_id],
             capture_output=True,
@@ -86,7 +85,6 @@ def get_all_visible_panes_content(trigger_pane_id):
         if not trigger_tab:
             return get_pane_content(trigger_pane_id)
 
-        # List all panes and filter by same tab
         result = subprocess.run(
             ["herdr", "pane", "list"],
             capture_output=True,
