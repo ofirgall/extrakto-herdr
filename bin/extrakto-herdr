@@ -1,0 +1,11 @@
+#!/bin/bash
+# Action script: captures the trigger pane ID and opens the extrakto overlay.
+set -e
+
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TRIGGER_PANE="${HERDR_PANE_ID}"
+
+herdr plugin pane open \
+    --plugin extrakto-herdr \
+    --entrypoint picker \
+    --env "EXTRAKTO_TRIGGER_PANE=${TRIGGER_PANE}"
