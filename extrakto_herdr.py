@@ -27,23 +27,24 @@ from extrakto import Extrakto, get_lines
 
 
 def extract_all(text, filter_name="all"):
-    """Use extrakto library to extract tokens."""
-    extrakto = Extrakto(alt=True)
+    """Use extrakto library to extract tokens — matches tmux extrakto behavior."""
     results = []
 
     if filter_name == "all":
+        extrakto = Extrakto(alt=True, prefix_name=True)
         for name in extrakto.all():
             results += extrakto[name].filter(text)
-        results += get_lines(text)
     elif filter_name == "line":
         results = get_lines(text)
-    elif filter_name == "word":
-        results = extrakto["word"].filter(text)
     else:
+        extrakto = Extrakto(alt=False, prefix_name=False)
         try:
             results = extrakto[filter_name].filter(text)
         except Exception:
             results = get_lines(text)
+
+    if not results:
+        return []
 
     results.reverse()
     return list(OrderedDict.fromkeys(results))
@@ -120,7 +121,7 @@ def insert_to_pane(text, pane_id):
 
 
 def run_fzf(items, filter_name):
-    filter_order = ["all", "word", "path", "url", "line", "quote", "s-quote"]
+    filter_order = ["word", "all", "line", "path", "url", "quote", "s-quote"]
     header = f"enter=copy, tab=insert, ctrl-f=filter [{filter_name}]"
 
     fzf_cmd = [
