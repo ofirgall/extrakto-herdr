@@ -14,7 +14,6 @@ Flow:
 """
 
 import os
-import re
 import subprocess
 import sys
 from collections import OrderedDict
@@ -23,20 +22,12 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PANE_ID = os.environ.get("HERDR_PANE_ID", "")
 TRIGGER_PANE = os.environ.get("EXTRAKTO_TRIGGER_PANE", PANE_ID)
 
-# Try to import extrakto from the tmux plugin (reuse its filters/config)
-EXTRAKTO_PATH = os.path.expanduser("~/.tmux/plugins/extrakto")
-if os.path.isdir(EXTRAKTO_PATH):
-    sys.path.insert(0, EXTRAKTO_PATH)
-
-try:
-    from extrakto import Extrakto, get_lines
-    HAS_EXTRAKTO = True
-except ImportError:
-    HAS_EXTRAKTO = False
+sys.path.insert(0, SCRIPT_DIR)
+from extrakto import Extrakto, get_lines
 
 
-def extract_with_extrakto(text, filter_name="all"):
-    """Use the real extrakto library."""
+def extract_all(text, filter_name="all"):
+    """Use extrakto library to extract tokens."""
     extrakto = Extrakto(alt=True)
     results = []
 
@@ -56,92 +47,6 @@ def extract_with_extrakto(text, filter_name="all"):
 
     results.reverse()
     return list(OrderedDict.fromkeys(results))
-
-
-# --- Fallback extraction (if extrakto not installed) ---
-
-BUILTIN_FILTERS = {
-    "word": {
-        "regex": r"([^][(){}=$\u2500-\u27BF\uE000-\uF8FF\u22C5\u21B4\u2502 \t\n\r]+)",
-        "lstrip": ",:;()[]{}<>'\"|",
-        "rstrip": ",:;()[]{}<>'\"|.",
-        "in_all": False,
-        "min_length": 5,
-    },
-    "path": {
-        "regex": r'(?:[ \t\n"([<\':]|^)(~|/)?([-~a-zA-Z0-9_+-,.]+/[^ \t\n\r|:"\'$%&)>\]]*)',
-        "exclude": r"[kmgKMG]/s$|^\d+/\d+$",
-        "rstrip": '",):"',
-        "in_all": True,
-        "min_length": 5,
-    },
-    "url": {
-        "regex": r"(https?://|git@|git://|ssh://|s*ftp://|file:///)([a-zA-Z0-9?=%/_.:,;~@!#$&()*+-]*)",
-        "in_all": True,
-        "rstrip": '",):"',
-        "min_length": 10,
-    },
-    "quote": {
-        "regex": r'("[^"\n\r]+")',
-        "in_all": True,
-        "min_length": 3,
-    },
-    "s-quote": {
-        "regex": r"('[^'\n\r]+')",
-        "in_all": True,
-        "min_length": 3,
-    },
-}
-
-
-def extract_filter(text, filt):
-    regex = filt.get("regex")
-    if not regex:
-        return []
-    results = []
-    exclude = filt.get("exclude", "")
-    lstrip = filt.get("lstrip", "")
-    rstrip = filt.get("rstrip", "")
-    min_length = filt.get("min_length", 5)
-
-    for m in re.finditer(regex, "\n" + text, flags=re.I):
-        item = "".join(filter(None, m.groups()))
-        if lstrip:
-            item = item.lstrip(lstrip)
-        if rstrip:
-            item = item.rstrip(rstrip)
-        if len(item) >= min_length:
-            if not exclude or not re.search(exclude, item, re.I):
-                results.append(item)
-    return results
-
-
-def extract_lines_fallback(text, min_length=5):
-    return [line.strip() for line in text.splitlines() if len(line.strip()) >= min_length]
-
-
-def extract_fallback(text, filter_name="all"):
-    results = []
-    if filter_name == "all":
-        for name, filt in BUILTIN_FILTERS.items():
-            if filt.get("in_all", True):
-                results.extend(extract_filter(text, filt))
-        results.extend(extract_lines_fallback(text))
-    elif filter_name == "line":
-        results = extract_lines_fallback(text)
-    elif filter_name in BUILTIN_FILTERS:
-        results = extract_filter(text, BUILTIN_FILTERS[filter_name])
-    else:
-        results = extract_lines_fallback(text)
-
-    results.reverse()
-    return list(OrderedDict.fromkeys(results))
-
-
-def extract_all(text, filter_name="all"):
-    if HAS_EXTRAKTO:
-        return extract_with_extrakto(text, filter_name)
-    return extract_fallback(text, filter_name)
 
 
 # --- Herdr integration ---
