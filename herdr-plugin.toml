@@ -10,6 +10,21 @@ id = "open"
 title = "Extrakto"
 command = ["python3", "./bin/extrakto-herdr.py"]
 
+[[actions]]
+id = "open-url"
+title = "Extrakto (URLs)"
+command = ["./bin/extrakto-herdr", "url"]
+
+[[actions]]
+id = "open-path"
+title = "Extrakto (Paths)"
+command = ["./bin/extrakto-herdr", "path"]
+
+[[actions]]
+id = "open-line"
+title = "Extrakto (Lines)"
+command = ["./bin/extrakto-herdr", "line"]
+
 [[panes]]
 id = "picker"
 title = "Extrakto"

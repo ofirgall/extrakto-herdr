@@ -1,11 +1,17 @@
 #!/bin/bash
 # Action script: captures the trigger pane ID and opens the extrakto overlay.
+# Usage: extrakto-herdr [filter]
+#   filter: optional initial filter (word, all, line, path, url, quote, s-quote)
 set -e
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TRIGGER_PANE="${HERDR_PANE_ID}"
+INITIAL_FILTER="${1:-}"
+
+env_args=(--env "EXTRAKTO_TRIGGER_PANE=${TRIGGER_PANE}")
+[[ -n "$INITIAL_FILTER" ]] && env_args+=(--env "EXTRAKTO_INITIAL_FILTER=${INITIAL_FILTER}")
 
 herdr plugin pane open \
     --plugin extrakto-herdr \
     --entrypoint picker \
-    --env "EXTRAKTO_TRIGGER_PANE=${TRIGGER_PANE}"
+    "${env_args[@]}"

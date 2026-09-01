@@ -21,6 +21,9 @@ from collections import OrderedDict
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PANE_ID = os.environ.get("HERDR_PANE_ID", "")
 TRIGGER_PANE = os.environ.get("EXTRAKTO_TRIGGER_PANE", PANE_ID)
+INITIAL_FILTER = os.environ.get("EXTRAKTO_INITIAL_FILTER", "").strip()
+
+VALID_FILTERS = {"word", "all", "line", "path", "url", "quote", "s-quote"}
 
 sys.path.insert(0, SCRIPT_DIR)
 from extrakto import Extrakto, get_lines
@@ -216,7 +219,7 @@ def main():
         print("No pane content found", file=sys.stderr)
         sys.exit(1)
 
-    current_filter = "word"
+    current_filter = INITIAL_FILTER if INITIAL_FILTER in VALID_FILTERS else "word"
 
     while True:
         items = extract_all(text, current_filter)
