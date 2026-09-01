@@ -167,16 +167,31 @@ def insert_to_pane(text, pane_id):
         pass
 
 
+def open_selection(text):
+    """Open the selection with the system opener (xdg-open / open)."""
+    import platform
+    opener = "open" if platform.system() == "Darwin" else "xdg-open"
+    for item in text.strip().splitlines():
+        item = item.strip()
+        if item:
+            subprocess.Popen(
+                [opener, item],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+
+
 def run_fzf(items, filter_name):
     filter_order = ["word", "all", "line", "path", "url", "quote", "s-quote"]
-    header = f"enter=copy, tab=insert, ctrl-f=filter [{filter_name}]"
+    header = f"enter=insert, tab=copy, ctrl-o=open, ctrl-f=filter [{filter_name}]"
 
     fzf_cmd = [
         "fzf",
         "--multi",
         "--no-sort",
         f"--header={header}",
-        "--expect=ctrl-c,esc,tab,ctrl-f",
+        "--expect=ctrl-c,esc,tab,ctrl-f,ctrl-o",
         "--tiebreak=index",
         "--no-info",
     ]
@@ -202,11 +217,13 @@ def run_fzf(items, filter_name):
         next_filter = filter_order[(idx + 1) % len(filter_order)]
         return ("switch_filter", [next_filter])
     elif key == "tab":
-        return ("insert", selection)
+        return ("copy", selection)
+    elif key == "ctrl-o":
+        return ("open", selection)
     elif key in ("ctrl-c", "esc"):
         return ("cancel", [])
     else:
-        return ("copy", selection)
+        return ("insert", selection)
 
 
 def main():
@@ -233,13 +250,17 @@ def main():
         elif action == "switch_filter":
             current_filter = selection[0]
             continue
+        elif action == "insert":
+            result = "\n".join(selection) if current_filter in ("all", "line") else " ".join(selection)
+            insert_to_pane(result, TRIGGER_PANE)
+            break
         elif action == "copy":
             result = "\n".join(selection) if current_filter in ("all", "line") else " ".join(selection)
             copy_to_clipboard(result)
             break
-        elif action == "insert":
-            result = "\n".join(selection) if current_filter in ("all", "line") else " ".join(selection)
-            insert_to_pane(result, TRIGGER_PANE)
+        elif action == "open":
+            result = "\n".join(selection)
+            open_selection(result)
             break
 
 
